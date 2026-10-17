@@ -1,0 +1,6 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=$HOME/public_html/idpedidos/
+    - /bin/mkdir -p $DEPLOYPATH
+    - /bin/cp -R ./idpedidos/. $DEPLOYPATH
