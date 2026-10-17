@@ -25,3 +25,7 @@ La página se puede instalar como app (ventana propia con su icono):
 1. Abre `https://flowaiinfo.lat/idpedidos` en **Chrome** o **Edge**.
 2. Chrome: icono de instalar en la barra de direcciones (o menú ⋮ → **Transmitir, guardar y compartir** → **Instalar página como app**). Edge: menú … → **Aplicaciones** → **Instalar este sitio como una aplicación**.
 3. Con la app abierta, clic derecho en su icono de la barra de tareas → **Anclar a la barra de tareas**.
+
+## Ventana siempre visible
+
+El botón **📌 Siempre visible** abre el cuadro de verificación en una ventana pequeña que se queda encima de las demás aplicaciones (Chrome/Edge 116+). Al cerrarla, el cuadro vuelve a la página. La página principal debe seguir abierta (puede estar minimizada).

@@ -65,12 +65,13 @@
     <span id="fecha"></span>
   </header>
 
-  <section class="card">
+  <section class="card" id="verificador">
     <input id="id" type="text" autocomplete="off" spellcheck="false" placeholder="Pega o escribe el ID del pedido" autofocus>
     <div id="estado">Esperando un ID…</div>
     <div class="fila">
       <button id="registrar" class="primario" disabled>Marcar como despachado (Enter)</button>
       <button id="limpiar">Limpiar</button>
+      <button id="flotar" hidden title="Ventana pequeña que se queda encima de las demás aplicaciones">📌 Siempre visible</button>
     </div>
     <div class="fila">
       <label><input type="checkbox" id="auto"> Registrar automáticamente al pegar si es nuevo</label>
@@ -250,6 +251,33 @@
   };
 
   // Sincroniza si la página está abierta en varias pestañas.
+  // Ventana flotante siempre encima (Document Picture-in-Picture, Chrome/Edge 116+).
+  // Se mueve el cuadro de verificación a esa ventana y se devuelve al cerrarla.
+  var btnFlotar = $('flotar'), verificador = $('verificador');
+  if ('documentPictureInPicture' in window) btnFlotar.hidden = false;
+  btnFlotar.onclick = function () {
+    var abierta = window.documentPictureInPicture.window;
+    if (abierta) { abierta.close(); return; }
+    var marcador = document.createComment('verificador');
+    window.documentPictureInPicture.requestWindow({ width: 420, height: 300 }).then(function (pip) {
+      document.querySelectorAll('style').forEach(function (st) { pip.document.head.appendChild(st.cloneNode(true)); });
+      pip.document.title = 'ID Pedidos';
+      pip.document.body.style.padding = '8px';
+      verificador.parentNode.insertBefore(marcador, verificador);
+      pip.document.body.appendChild(verificador);
+      btnFlotar.textContent = '↩ Volver a la página';
+      input.focus();
+      pip.addEventListener('pagehide', function () {
+        marcador.parentNode.insertBefore(verificador, marcador);
+        marcador.remove();
+        btnFlotar.textContent = '📌 Siempre visible';
+        verificar(); pintarLista();
+      });
+    }).catch(function () {
+      alert('Tu navegador no permitió abrir la ventana flotante. Usa Chrome o Edge actualizados.');
+    });
+  };
+
   window.addEventListener('storage', function () { pintarDias(); verificar(); pintarLista(); });
 
   $('fecha').textContent = new Date().toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' });
