@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ID Pedidos · FlowAI</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --text: #1d2330; --muted: #6b7280; --border: #d9dde3;
+    --ok: #16a34a; --ok-bg: #dcfce7; --bad: #dc2626; --bad-bg: #fee2e2; --accent: #2563eb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --card: #1b2029; --text: #e7eaf0; --muted: #9aa3b2; --border: #2c3340;
+      --ok: #22c55e; --ok-bg: #0f2e1b; --bad: #f87171; --bad-bg: #3a1414; --accent: #60a5fa;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 520px; margin: 0 auto; padding: 16px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 12px; }
+  h1 { font-size: 20px; margin: 0; }
+  #fecha { color: var(--muted); font-size: 13px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+  #id { width: 100%; font-size: 26px; font-weight: 600; letter-spacing: .5px; padding: 14px;
+    border: 3px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text); outline: none; }
+  #id.ok  { border-color: var(--ok);  background: var(--ok-bg); }
+  #id.bad { border-color: var(--bad); background: var(--bad-bg); }
+  #estado { margin-top: 10px; min-height: 48px; padding: 12px; border-radius: 10px; font-weight: 700; font-size: 17px;
+    display: flex; align-items: center; justify-content: center; text-align: center; color: var(--muted); border: 1px dashed var(--border); }
+  #estado.ok  { background: var(--ok);  color: #fff; border-color: transparent; }
+  #estado.bad { background: var(--bad); color: #fff; border-color: transparent; }
+  .fila { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
+  button { font: inherit; padding: 9px 14px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--card); color: var(--text); cursor: pointer; }
+  button.primario { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  label { color: var(--muted); font-size: 13px; display: flex; gap: 6px; align-items: center; }
+  .lista-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .lista-head h2 { font-size: 16px; margin: 0; }
+  #buscar { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--card); color: var(--text); font: inherit; margin-bottom: 8px; }
+  ul { list-style: none; margin: 0; padding: 0; max-height: 45vh; overflow-y: auto; }
+  li { display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    padding: 7px 4px; border-bottom: 1px solid var(--border); }
+  li .pid { font-weight: 600; word-break: break-all; }
+  li .hora { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  li.resaltado { background: var(--bad-bg); }
+  li button { padding: 2px 8px; font-size: 13px; }
+  .vacio { color: var(--muted); text-align: center; padding: 12px; }
+  .pie { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .pie button { font-size: 13px; padding: 6px 10px; }
+  select { font: inherit; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>ID Pedidos</h1>
+    <span id="fecha"></span>
+  </header>
+
+  <section class="card">
+    <input id="id" type="text" autocomplete="off" spellcheck="false" placeholder="Pega o escribe el ID del pedido" autofocus>
+    <div id="estado">Esperando un ID…</div>
+    <div class="fila">
+      <button id="registrar" class="primario" disabled>Marcar como despachado (Enter)</button>
+      <button id="limpiar">Limpiar</button>
+    </div>
+    <div class="fila">
+      <label><input type="checkbox" id="auto"> Registrar automáticamente al pegar si es nuevo</label>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="lista-head">
+      <h2>Despachados <span id="dia-label">hoy</span>: <span id="total">0</span></h2>
+      <select id="dia" title="Ver otro día"></select>
+    </div>
+    <input id="buscar" type="search" placeholder="Buscar en la lista…">
+    <ul id="lista"></ul>
+    <div class="pie">
+      <button id="exportar">Exportar CSV</button>
+      <button id="borrarDia">Borrar lista de este día</button>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  var PREFIJO = 'idpedidos:';
+  var $ = function (s) { return document.getElementById(s); };
+  var input = $('id'), estado = $('estado'), btnReg = $('registrar'), lista = $('lista'),
+      total = $('total'), selDia = $('dia'), buscar = $('buscar'), auto = $('auto');
+
+  function hoy() {
+    var d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  // Normaliza para comparar: sin espacios y en mayúsculas.
+  function normalizar(v) { return String(v || '').replace(/\s+/g, '').toUpperCase(); }
+
+  function leer(dia) {
+    try { return JSON.parse(localStorage.getItem(PREFIJO + dia)) || []; } catch (e) { return []; }
+  }
+  function guardar(dia, datos) {
+    try { localStorage.setItem(PREFIJO + dia, JSON.stringify(datos)); } catch (e) {}
+  }
+  function diasGuardados() {
+    var dias = [];
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf(PREFIJO + '20') === 0) dias.push(k.slice(PREFIJO.length));
+      }
+    } catch (e) {}
+    if (dias.indexOf(hoy()) < 0) dias.push(hoy());
+    return dias.sort().reverse();
+  }
+  function buscarEnHoy(id) {
+    var datos = leer(hoy());
+    for (var i = 0; i < datos.length; i++) if (datos[i].id === id) return datos[i];
+    return null;
+  }
+
+  var diaActual = hoy();
+
+  function pintarDias() {
+    var dias = diasGuardados();
+    selDia.innerHTML = '';
+    dias.forEach(function (d) {
+      var o = document.createElement('option');
+      o.value = d; o.textContent = d === hoy() ? 'Hoy (' + d + ')' : d;
+      selDia.appendChild(o);
+    });
+    selDia.value = diaActual;
+  }
+
+  function pintarLista() {
+    var datos = leer(diaActual).slice().reverse();
+    var filtro = normalizar(buscar.value);
+    var actual = normalizar(input.value);
+    total.textContent = datos.length;
+    $('dia-label').textContent = diaActual === hoy() ? 'hoy' : 'el ' + diaActual;
+    lista.innerHTML = '';
+    var visibles = datos.filter(function (r) { return !filtro || r.id.indexOf(filtro) >= 0; });
+    if (!visibles.length) {
+      var li = document.createElement('li');
+      li.className = 'vacio';
+      li.textContent = datos.length ? 'Sin coincidencias' : 'Aún no hay pedidos despachados';
+      lista.appendChild(li);
+      return;
+    }
+    visibles.forEach(function (r) {
+      var li = document.createElement('li');
+      if (actual && r.id === actual && diaActual === hoy()) li.className = 'resaltado';
+      var izq = document.createElement('div');
+      var pid = document.createElement('div'); pid.className = 'pid'; pid.textContent = r.id;
+      var hora = document.createElement('div'); hora.className = 'hora'; hora.textContent = r.hora;
+      izq.appendChild(pid); izq.appendChild(hora);
+      var del = document.createElement('button');
+      del.textContent = 'Quitar'; del.title = 'Quitar de la lista';
+      del.onclick = function () {
+        if (!confirm('¿Quitar el ID ' + r.id + ' de la lista?')) return;
+        guardar(diaActual, leer(diaActual).filter(function (x) { return x.id !== r.id; }));
+        verificar(); pintarLista();
+      };
+      li.appendChild(izq); li.appendChild(del);
+      lista.appendChild(li);
+    });
+  }
+
+  function verificar() {
+    var id = normalizar(input.value);
+    input.classList.remove('ok', 'bad');
+    estado.classList.remove('ok', 'bad');
+    if (!id) {
+      estado.textContent = 'Esperando un ID…';
+      btnReg.disabled = true;
+      return null;
+    }
+    var previo = buscarEnHoy(id);
+    if (previo) {
+      input.classList.add('bad'); estado.classList.add('bad');
+      estado.textContent = '✖ REPETIDO — ya despachado hoy a las ' + previo.hora;
+      btnReg.disabled = true;
+    } else {
+      input.classList.add('ok'); estado.classList.add('ok');
+      estado.textContent = '✔ NUEVO — no se ha despachado hoy';
+      btnReg.disabled = false;
+    }
+    return previo;
+  }
+
+  function registrar() {
+    var id = normalizar(input.value);
+    if (!id || buscarEnHoy(id)) return false;
+    var datos = leer(hoy());
+    datos.push({ id: id, hora: new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) });
+    guardar(hoy(), datos);
+    diaActual = hoy();
+    pintarDias();
+    verificar();
+    estado.textContent = '✔ NUEVO — registrado como despachado';
+    btnReg.disabled = true;
+    pintarLista();
+    return true;
+  }
+
+  var pegado = false;
+  input.addEventListener('paste', function () { pegado = true; });
+  input.addEventListener('input', function () {
+    if (diaActual !== hoy()) { diaActual = hoy(); pintarDias(); }
+    var previo = verificar();
+    if (pegado && auto.checked && !previo) registrar();
+    pegado = false;
+    pintarLista();
+  });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); registrar(); input.select(); }
+    if (e.key === 'Escape') { input.value = ''; verificar(); pintarLista(); }
+  });
+  // Al enfocar el cuadro, se selecciona todo para que el siguiente pegado reemplace el ID anterior.
+  input.addEventListener('focus', function () { input.select(); });
+  btnReg.onclick = function () { registrar(); input.focus(); };
+  $('limpiar').onclick = function () { input.value = ''; verificar(); pintarLista(); input.focus(); };
+  buscar.addEventListener('input', pintarLista);
+  selDia.onchange = function () { diaActual = selDia.value; pintarLista(); };
+
+  try { auto.checked = localStorage.getItem(PREFIJO + 'cfg:auto') === '1'; } catch (e) {}
+  auto.onchange = function () { try { localStorage.setItem(PREFIJO + 'cfg:auto', auto.checked ? '1' : '0'); } catch (e) {} };
+
+  $('exportar').onclick = function () {
+    var datos = leer(diaActual);
+    var csv = 'id,hora\n' + datos.map(function (r) { return '"' + r.id.replace(/"/g, '""') + '",' + r.hora; }).join('\n');
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = 'pedidos-' + diaActual + '.csv';
+    a.click();
+  };
+  $('borrarDia').onclick = function () {
+    if (!confirm('¿Borrar todos los IDs del ' + diaActual + '? No se puede deshacer.')) return;
+    try { localStorage.removeItem(PREFIJO + diaActual); } catch (e) {}
+    diaActual = hoy(); pintarDias(); verificar(); pintarLista();
+  };
+
+  // Sincroniza si la página está abierta en varias pestañas.
+  window.addEventListener('storage', function () { pintarDias(); verificar(); pintarLista(); });
+
+  $('fecha').textContent = new Date().toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' });
+  pintarDias(); verificar(); pintarLista();
+})();
+</script>
+</body>
+</html>
