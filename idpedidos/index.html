@@ -55,6 +55,21 @@
   .vacio { color: var(--muted); text-align: center; padding: 12px; }
   .pie { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
   .pie button { font-size: 13px; padding: 6px 10px; }
+  li .plat { margin-left: 8px; font-weight: 500; font-size: 12px; padding: 1px 7px; border-radius: 999px;
+    background: var(--bg); border: 1px solid var(--border); }
+  #tirilla { display: none; }
+  @media print {
+    @page { margin: 3mm; }
+    body { background: #fff; }
+    main { display: none; }
+    #tirilla { display: block; color: #000; font: 12px/1.35 "Courier New", monospace; }
+    #tirilla table { width: 100%; border-collapse: collapse; }
+    #tirilla th { text-align: left; border-bottom: 1px solid #000; }
+    #tirilla td, #tirilla th { padding: 1px 2px; vertical-align: top; }
+    #tirilla td:last-child, #tirilla .t-resumen td:last-child { text-align: right; }
+    #tirilla hr { border: 0; border-top: 1px dashed #000; margin: 6px 0; }
+    .t-centro { text-align: center; }
+  }
   select { font: inherit; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
 </style>
 </head>
@@ -66,7 +81,7 @@
   </header>
 
   <section class="card" id="verificador">
-    <input id="id" type="text" autocomplete="off" spellcheck="false" placeholder="Pega o escribe el ID del pedido" autofocus>
+    <input id="id" type="text" autocomplete="off" spellcheck="false" placeholder="Pega el pedido, ej. ID: 48213 Rappi" autofocus>
     <div id="estado">Esperando un ID…</div>
     <div class="fila">
       <button id="registrar" class="primario" disabled>Marcar como despachado (Enter)</button>
@@ -86,11 +101,13 @@
     <input id="buscar" type="search" placeholder="Buscar en la lista…">
     <ul id="lista"></ul>
     <div class="pie">
+      <button id="imprimir">🖨 Imprimir tirilla</button>
       <button id="exportar">Exportar CSV</button>
       <button id="borrarDia">Borrar lista de este día</button>
     </div>
   </section>
 </main>
+<div id="tirilla"></div>
 
 <script>
 (function () {
@@ -103,11 +120,28 @@
     var d = new Date();
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
-  // Normaliza para comparar: sin espacios y en mayúsculas.
-  function normalizar(v) { return String(v || '').replace(/\s+/g, '').toUpperCase(); }
+  // "ID: 48213 Rappi" → { num: '48213', plat: 'Rappi' }. El número se compara sin espacios y en mayúsculas.
+  function interpretar(v) {
+    var t = String(v || '').replace(/\s+/g, ' ').trim().replace(/^ID\s*:?\s*/i, '');
+    var m = t.match(/^(\d+)\s*(.*)$/) || t.match(/^(\S+)\s*(.*)$/);
+    return m ? { num: m[1].toUpperCase(), plat: m[2].trim() } : null;
+  }
+  function clavePlat(p) { return String(p || '').normalize('NFD').replace(/[̀-ͯ\s]/g, '').toLowerCase(); }
+  // Mismo pedido = mismo número y misma plataforma (o una de las dos sin plataforma).
+  function mismoPedido(a, b) {
+    return a.num === b.num && (!a.plat || !b.plat || clavePlat(a.plat) === clavePlat(b.plat));
+  }
+  function etiqueta(r) { return 'ID: ' + r.num + (r.plat ? ' ' + r.plat : ''); }
 
   function leer(dia) {
-    try { return JSON.parse(localStorage.getItem(PREFIJO + dia)) || []; } catch (e) { return []; }
+    var datos;
+    try { datos = JSON.parse(localStorage.getItem(PREFIJO + dia)) || []; } catch (e) { datos = []; }
+    // Registros de la versión anterior solo tenían "id".
+    return datos.map(function (r) {
+      if (r.num) return r;
+      var p = interpretar(r.id) || { num: String(r.id), plat: '' };
+      return { num: p.num, plat: p.plat, hora: r.hora };
+    });
   }
   function guardar(dia, datos) {
     try { localStorage.setItem(PREFIJO + dia, JSON.stringify(datos)); } catch (e) {}
@@ -123,10 +157,13 @@
     if (dias.indexOf(hoy()) < 0) dias.push(hoy());
     return dias.sort().reverse();
   }
-  function buscarEnHoy(id) {
-    var datos = leer(hoy());
-    for (var i = 0; i < datos.length; i++) if (datos[i].id === id) return datos[i];
-    return null;
+  function buscarEnHoy(p) {
+    var datos = leer(hoy()), res = { repetido: null, otra: null };
+    for (var i = 0; i < datos.length; i++) {
+      if (mismoPedido(datos[i], p)) { res.repetido = datos[i]; break; }
+      if (datos[i].num === p.num) res.otra = datos[i];
+    }
+    return res;
   }
 
   var diaActual = hoy();
@@ -144,12 +181,12 @@
 
   function pintarLista() {
     var datos = leer(diaActual).slice().reverse();
-    var filtro = normalizar(buscar.value);
-    var actual = normalizar(input.value);
+    var filtro = buscar.value.trim().toUpperCase();
+    var actual = interpretar(input.value);
     total.textContent = datos.length;
     $('dia-label').textContent = diaActual === hoy() ? 'hoy' : 'el ' + diaActual;
     lista.innerHTML = '';
-    var visibles = datos.filter(function (r) { return !filtro || r.id.indexOf(filtro) >= 0; });
+    var visibles = datos.filter(function (r) { return !filtro || etiqueta(r).toUpperCase().indexOf(filtro) >= 0; });
     if (!visibles.length) {
       var li = document.createElement('li');
       li.className = 'vacio';
@@ -159,16 +196,22 @@
     }
     visibles.forEach(function (r) {
       var li = document.createElement('li');
-      if (actual && r.id === actual && diaActual === hoy()) li.className = 'resaltado';
+      if (actual && mismoPedido(r, actual) && diaActual === hoy()) li.className = 'resaltado';
       var izq = document.createElement('div');
-      var pid = document.createElement('div'); pid.className = 'pid'; pid.textContent = r.id;
+      var pid = document.createElement('div'); pid.className = 'pid'; pid.textContent = 'ID: ' + r.num;
+      if (r.plat) {
+        var plat = document.createElement('span'); plat.className = 'plat'; plat.textContent = r.plat;
+        pid.appendChild(plat);
+      }
       var hora = document.createElement('div'); hora.className = 'hora'; hora.textContent = r.hora;
       izq.appendChild(pid); izq.appendChild(hora);
       var del = document.createElement('button');
       del.textContent = 'Quitar'; del.title = 'Quitar de la lista';
       del.onclick = function () {
-        if (!confirm('¿Quitar el ID ' + r.id + ' de la lista?')) return;
-        guardar(diaActual, leer(diaActual).filter(function (x) { return x.id !== r.id; }));
+        if (!confirm('¿Quitar ' + etiqueta(r) + ' de la lista?')) return;
+        guardar(diaActual, leer(diaActual).filter(function (x) {
+          return !(x.num === r.num && x.plat === r.plat && x.hora === r.hora);
+        }));
         verificar(); pintarLista();
       };
       li.appendChild(izq); li.appendChild(del);
@@ -177,32 +220,33 @@
   }
 
   function verificar() {
-    var id = normalizar(input.value);
+    var p = interpretar(input.value);
     input.classList.remove('ok', 'bad');
     estado.classList.remove('ok', 'bad');
-    if (!id) {
+    if (!p) {
       estado.textContent = 'Esperando un ID…';
       btnReg.disabled = true;
       return null;
     }
-    var previo = buscarEnHoy(id);
-    if (previo) {
+    var res = buscarEnHoy(p);
+    if (res.repetido) {
       input.classList.add('bad'); estado.classList.add('bad');
-      estado.textContent = '✖ REPETIDO — ya despachado hoy a las ' + previo.hora;
+      estado.textContent = '✖ REPETIDO — ' + etiqueta(res.repetido) + ' ya despachado hoy a las ' + res.repetido.hora;
       btnReg.disabled = true;
     } else {
       input.classList.add('ok'); estado.classList.add('ok');
-      estado.textContent = '✔ NUEVO — no se ha despachado hoy';
+      estado.textContent = '✔ NUEVO — no se ha despachado hoy' +
+        (res.otra ? ' (ojo: el ' + res.otra.num + ' ya salió por ' + res.otra.plat + ')' : '');
       btnReg.disabled = false;
     }
-    return previo;
+    return res.repetido;
   }
 
   function registrar() {
-    var id = normalizar(input.value);
-    if (!id || buscarEnHoy(id)) return false;
+    var p = interpretar(input.value);
+    if (!p || buscarEnHoy(p).repetido) return false;
     var datos = leer(hoy());
-    datos.push({ id: id, hora: new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) });
+    datos.push({ num: p.num, plat: p.plat, hora: new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) });
     guardar(hoy(), datos);
     diaActual = hoy();
     pintarDias();
@@ -213,12 +257,35 @@
     return true;
   }
 
+  // Tirilla para impresora de recibos: todos los pedidos del día seleccionado, en orden de despacho.
+  function imprimirTirilla() {
+    var datos = leer(diaActual);
+    if (!datos.length) { alert('No hay pedidos para imprimir en este día.'); return; }
+    var t = $('tirilla'), porPlat = {};
+    var esc = function (v) { var d = document.createElement('div'); d.textContent = v; return d.innerHTML; };
+    var filas = datos.map(function (r, i) {
+      var k = clavePlat(r.plat);
+      porPlat[k] = porPlat[k] || { nombre: r.plat || 'Sin plataforma', n: 0 };
+      porPlat[k].n++;
+      return '<tr><td>' + (i + 1) + '</td><td>ID: ' + esc(r.num) + '</td><td>' + esc(r.plat) + '</td><td>' + esc(r.hora.slice(0, 5)) + '</td></tr>';
+    }).join('');
+    var resumen = Object.keys(porPlat).sort().map(function (k) {
+      return '<tr><td>' + esc(porPlat[k].nombre) + '</td><td>' + porPlat[k].n + '</td></tr>';
+    }).join('');
+    t.innerHTML =
+      '<div class="t-centro"><strong>PEDIDOS DESPACHADOS</strong><br>' + diaActual + '</div>' +
+      '<hr><table><thead><tr><th>#</th><th>ID</th><th>Plataforma</th><th>Hora</th></tr></thead><tbody>' + filas + '</tbody></table>' +
+      '<hr><table class="t-resumen">' + resumen + '<tr><td><strong>TOTAL</strong></td><td><strong>' + datos.length + '</strong></td></tr></table>' +
+      '<hr><div class="t-centro">Impreso: ' + new Date().toLocaleString('es') + '</div>';
+    window.print();
+  }
+
   var pegado = false;
   input.addEventListener('paste', function () { pegado = true; });
   input.addEventListener('input', function () {
     if (diaActual !== hoy()) { diaActual = hoy(); pintarDias(); }
-    var previo = verificar();
-    if (pegado && auto.checked && !previo) registrar();
+    var p = interpretar(input.value);
+    if (pegado && auto.checked && p && !buscarEnHoy(p).repetido) registrar(); else verificar();
     pegado = false;
     pintarLista();
   });
@@ -238,12 +305,14 @@
 
   $('exportar').onclick = function () {
     var datos = leer(diaActual);
-    var csv = 'id,hora\n' + datos.map(function (r) { return '"' + r.id.replace(/"/g, '""') + '",' + r.hora; }).join('\n');
+    var q = function (v) { return '"' + String(v).replace(/"/g, '""') + '"'; };
+    var csv = 'id,plataforma,hora\n' + datos.map(function (r) { return [q(r.num), q(r.plat), r.hora].join(','); }).join('\n');
     var a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
     a.download = 'pedidos-' + diaActual + '.csv';
     a.click();
   };
+  $('imprimir').onclick = imprimirTirilla;
   $('borrarDia').onclick = function () {
     if (!confirm('¿Borrar todos los IDs del ' + diaActual + '? No se puede deshacer.')) return;
     try { localStorage.removeItem(PREFIJO + diaActual); } catch (e) {}

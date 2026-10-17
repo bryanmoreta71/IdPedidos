@@ -29,3 +29,9 @@ La página se puede instalar como app (ventana propia con su icono):
 ## Ventana siempre visible
 
 El botón **📌 Siempre visible** abre el cuadro de verificación en una ventana pequeña que se queda encima de las demás aplicaciones (Chrome/Edge 116+). Al cerrarla, el cuadro vuelve a la página. La página principal debe seguir abierta (puede estar minimizada).
+
+## Formato del pedido e impresión
+
+- Se pega el texto del pedido tal cual, por ejemplo `ID: 48213 Rappi`. La página separa el número (`48213`) y la plataforma (`Rappi`).
+- Es **repetido** si el mismo número ya salió hoy por la misma plataforma (o si una de las dos no tiene plataforma). Si el número ya salió por otra plataforma, se marca nuevo con un aviso.
+- **🖨 Imprimir tirilla** imprime todos los pedidos del día seleccionado (número, ID, plataforma y hora), con totales por plataforma. Para impresora de recibos, en el cuadro de impresión de Chrome elige esa impresora y en *Más opciones* pon márgenes en *Ninguno*.
