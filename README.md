@@ -17,3 +17,11 @@ El archivo `.cpanel.yml` copia `idpedidos/` a `~/public_html/idpedidos/`, así l
 4. Abre `https://flowaiinfo.lat/idpedidos`.
 
 Para publicar cambios futuros: haz el commit en GitHub y en cPanel repite **Update from Remote** → **Deploy HEAD Commit**.
+
+## Anclar a la barra de tareas de Windows
+
+La página se puede instalar como app (ventana propia con su icono):
+
+1. Abre `https://flowaiinfo.lat/idpedidos` en **Chrome** o **Edge**.
+2. Chrome: icono de instalar en la barra de direcciones (o menú ⋮ → **Transmitir, guardar y compartir** → **Instalar página como app**). Edge: menú … → **Aplicaciones** → **Instalar este sitio como una aplicación**.
+3. Con la app abierta, clic derecho en su icono de la barra de tareas → **Anclar a la barra de tareas**.
